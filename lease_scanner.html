@@ -1,0 +1,488 @@
+<!-- Oil Lease Production Scanner — client-side, streams large CSV/TXT files -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>American Warrior — Lease Production Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#14110e;
+    --panel:#1e1a16;
+    --panel-2:#262019;
+    --line:#3a3128;
+    --ink:#ece4d8;
+    --muted:#9a8d7c;
+    --amber:#e8a03d;
+    --amber-bright:#f4b756;
+    --oil:#7fa07a;
+    --danger:#d6724b;
+    --shadow:0 18px 50px -20px rgba(0,0,0,.8);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(232,160,61,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(127,160,122,.07), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 22px 80px}
+
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:18px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo{flex:0 0 auto;width:74px;height:60px;border:1.5px solid var(--amber);border-radius:10px;background:#f3ece0;display:grid;place-items:center;overflow:hidden;box-shadow:0 6px 16px -8px rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,0,0,.04)}
+  .logo img{width:100%;height:100%;object-fit:contain;padding:4px;display:block}
+  h1{font-family:"Oswald",sans-serif;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:26px;margin:0;line-height:1}
+  .sub{color:var(--muted);font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;margin-top:5px}
+  .stat-strip{display:flex;gap:22px;color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:12px}
+  .stat-strip b{color:var(--amber);font-weight:600;display:block;font-size:18px;font-family:"Oswald",sans-serif}
+
+  .card{background:linear-gradient(180deg,var(--panel),#1a1612);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+  .pad{padding:22px}
+
+  /* dropzone */
+  #drop{margin-top:26px;border:1.5px dashed #4a3f31;border-radius:14px;background:linear-gradient(180deg,rgba(38,32,25,.6),rgba(20,17,14,.4));padding:40px 26px;text-align:center;transition:.18s;cursor:pointer}
+  #drop:hover,#drop.hot{border-color:var(--amber);background:rgba(232,160,61,.06)}
+  #drop .big{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.05em;font-size:19px}
+  #drop .small{color:var(--muted);font-size:13px;margin-top:6px}
+  #drop .browse{color:var(--amber-bright);text-decoration:underline;text-underline-offset:3px}
+
+  .file-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--muted)}
+  .file-row .dot{width:9px;height:9px;border-radius:50%;background:var(--oil);box-shadow:0 0 8px var(--oil)}
+  .file-row b{color:var(--ink)}
+
+  .controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:24px}
+  @media(max-width:740px){.controls{grid-template-columns:1fr}}
+  label.fld{display:block}
+  .fld .lab{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:12.5px;color:var(--amber);margin-bottom:8px}
+  .fld .hint{color:var(--muted);font-size:11.5px;margin-top:6px;line-height:1.4}
+  select,input[type=number]{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:12px 13px;font-family:"IBM Plex Mono",monospace;font-size:15px;outline:none;transition:.15s}
+  select:focus,input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,160,61,.15)}
+  select:disabled,input:disabled{opacity:.45;cursor:not-allowed}
+
+  .rangebox{display:flex;flex-direction:column;gap:10px}
+  .mini{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);margin-bottom:4px}
+  .mode{display:flex;gap:8px;margin-top:4px}
+  .mode button{flex:1;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);padding:11px 8px;border-radius:9px;cursor:pointer;font-family:"IBM Plex Sans";font-size:12.5px;font-weight:600;transition:.15s;line-height:1.25}
+  .mode button.on{border-color:var(--amber);color:var(--bg);background:var(--amber)}
+  .mode button:disabled{opacity:.45;cursor:not-allowed}
+
+  .actions{margin-top:24px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .run{background:linear-gradient(180deg,var(--amber-bright),var(--amber));color:#231a0e;border:none;padding:14px 30px;border-radius:10px;font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 10px 24px -10px rgba(232,160,61,.7);transition:.15s}
+  .run:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.05)}
+  .run:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--ink);padding:13px 18px;border-radius:10px;font-family:"IBM Plex Sans";font-weight:600;cursor:pointer;font-size:13px}
+  .ghost:hover:not(:disabled){border-color:var(--amber);color:var(--amber-bright)}
+  .ghost:disabled{opacity:.4;cursor:not-allowed}
+
+  .progress{margin-top:22px;display:none}
+  .progress.show{display:block}
+  .bar{height:8px;background:var(--panel-2);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amber),var(--amber-bright));transition:width .12s linear}
+  .progress .meta{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);margin-top:8px}
+
+  .results{margin-top:30px;display:none}
+  .results.show{display:block}
+  .res-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .res-head h2{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:20px;margin:0}
+  .res-head .count b{color:var(--amber);font-size:30px;font-family:"Oswald",sans-serif}
+  .res-head .count{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:12.5px}
+  .recap{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 13px;margin-bottom:16px}
+  .recap b{color:var(--ink)}
+
+  .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:62vh}
+  table{border-collapse:collapse;width:100%;font-family:"IBM Plex Mono",monospace;font-size:12px;white-space:nowrap}
+  thead th{position:sticky;top:0;background:#221d17;color:var(--amber);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600;letter-spacing:.03em;z-index:2}
+  thead th.sortable{cursor:pointer;user-select:none;white-space:nowrap;transition:background .12s,color .12s}
+  thead th.sortable:hover{background:#2c251c;color:var(--amber-bright)}
+  thead th.sorted{background:#33291b;color:var(--amber-bright)}
+  thead th .arr{font-size:10px;opacity:.95}
+  tbody td{padding:9px 12px;border-bottom:1px solid #2a241d;color:var(--ink)}
+  tbody tr:nth-child(even) td{background:rgba(255,255,255,.012)}
+  tbody tr:hover td{background:rgba(232,160,61,.07)}
+  td.prod{color:var(--amber-bright);font-weight:600;text-align:right}
+  td a{color:var(--oil);text-decoration:none}
+  td a:hover{text-decoration:underline}
+  .more-note{color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:12px;margin-top:12px;text-align:center}
+
+  .empty{padding:38px;text-align:center;color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:13px}
+  .err{color:var(--danger)}
+  footer.note{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6;border-top:1px solid var(--line);padding-top:16px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo"><img src="data:image/jpeg;base64,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" alt="American Warrior, Inc. logo"></div>
+      <div>
+        <div style="font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.14em;font-size:12px;color:var(--amber-bright);margin-bottom:3px">American Warrior, Inc.</div>
+        <h1>Lease Production Scanner</h1>
+        <div class="sub">Oil&nbsp;·&nbsp;Month-Year&nbsp;&amp;&nbsp;Minimum&nbsp;Output Filter</div>
+      </div>
+    </div>
+    <div class="stat-strip" id="statStrip" style="display:none">
+      <div><b id="sRows">—</b>records</div>
+      <div><b id="sLeases">—</b>leases</div>
+      <div><b id="sMonths">—</b>months</div>
+    </div>
+  </header>
+
+  <!-- file load -->
+  <div id="drop">
+    <input type="file" id="file" accept=".txt,.csv,text/plain,text/csv" style="display:none">
+    <div class="big">Drop your lease file here</div>
+    <div class="small">or <span class="browse">browse</span> for it — <code>.txt</code> / <code>.csv</code>, processed entirely on your device</div>
+  </div>
+
+  <div class="card pad" id="indexedCard" style="display:none;margin-top:18px">
+    <div class="file-row"><span class="dot"></span><b id="fname"></b><span id="fsize"></span><span id="findex"></span></div>
+
+    <div class="controls">
+      <div class="fld">
+        <div class="lab">Match rule</div>
+        <div class="mode">
+          <button id="modeRange" class="on" disabled>Date range<br><small style="font-weight:400;opacity:.8">From → To (inclusive)</small></button>
+          <button id="modeExact" disabled>Exact month<br><small style="font-weight:400;opacity:.8">one month only</small></button>
+        </div>
+        <div class="hint" id="modeHint">Returns every record from the From month through the To month.</div>
+      </div>
+
+      <div class="fld">
+        <div class="lab" id="dateLab">Month range</div>
+        <!-- range pickers -->
+        <div id="rangeBox" class="rangebox">
+          <div><div class="mini">From</div><select id="fromMonth" disabled></select></div>
+          <div><div class="mini">To <span style="opacity:.7">(leave on newest for “until now”)</span></div><select id="toMonth" disabled></select></div>
+        </div>
+        <!-- single picker -->
+        <select id="month" disabled style="display:none"></select>
+        <div class="hint" id="dateHint">Both ends are included in the results.</div>
+      </div>
+
+      <label class="fld">
+        <div class="lab">Minimum production (bbl)</div>
+        <input type="number" id="minprod" value="0" min="0" step="0.01" disabled>
+        <div class="hint">Keeps lines whose PRODUCTION is at or above this.</div>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="run" id="run" disabled>Scan</button>
+      <button class="ghost" id="csv" disabled>Download matches (CSV)</button>
+      <button class="ghost" id="reset">Load a different file</button>
+    </div>
+
+    <div class="progress" id="prog">
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="meta"><span id="progText">Scanning…</span><span id="progPct">0%</span></div>
+    </div>
+  </div>
+
+  <!-- results -->
+  <section class="results" id="results">
+    <div class="res-head">
+      <h2>Matching leases <span style="font-family:'IBM Plex Sans';text-transform:none;letter-spacing:0;font-size:12px;font-weight:400;color:var(--muted)">· click any column heading to sort</span></h2>
+      <div class="count"><b id="matchCount">0</b> lines matched</div>
+    </div>
+    <div class="recap" id="recap"></div>
+    <div class="tablewrap" id="tablewrap"></div>
+    <div class="more-note" id="moreNote"></div>
+  </section>
+
+  <footer class="note">
+    Note: <b>PRODUCT</b> is the product type and is <b>"O" (oil)</b> for every record — the numeric barrels figure used for the minimum filter comes from the <b>PRODUCTION</b> column. Nothing leaves your browser; the file is read locally each time you scan.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const COLS = ["LEASE_KID","LEASE","DOR_CODE","API_NUMBER","FIELD","PRODUCING_ZONE","OPERATOR","COUNTY","TOWNSHIP","TWN_DIR","RANGE","RANGE_DIR","SECTION","SPOT","LATITUDE","LONGITUDE","MONTH-YEAR","PRODUCT","WELLS","PRODUCTION","URL"];
+  // columns hidden from the on-screen table (still included in the CSV download)
+  const HIDDEN = new Set(["API_NUMBER","FIELD","PRODUCING_ZONE","TWN_DIR","RANGE_DIR","LATITUDE","LONGITUDE","PRODUCT"]);
+  const DISPLAY_COLS = COLS.filter(c=>!HIDDEN.has(c));
+  const DISPLAY_CAP = 1000; // rows rendered in the table; CSV export holds all
+  const $ = id => document.getElementById(id);
+
+  let file = null;
+  let mode = "range";            // 'range' | 'exact'
+  let lastMatches = [];          // array of row objects (for CSV)
+  let lastInfo = null;           // recap info from the most recent scan
+  let lastHeaderOrder = COLS;
+
+  // sorting state
+  let sortCol = null;            // currently sorted column name
+  let sortDir = 1;               // 1 = ascending, -1 = descending
+  // columns that should sort as numbers (everything else sorts alphabetically)
+  const NUMERIC = new Set(["LEASE_KID","DOR_CODE","TOWNSHIP","RANGE","SECTION","LATITUDE","LONGITUDE","WELLS","PRODUCTION"]);
+
+  // ---- month helpers -------------------------------------------------------
+  function monthKey(my){ // "3-2025" -> 202503  (sortable int)
+    const m = /^(\d{1,2})-(\d{4})$/.exec((my||"").trim());
+    if(!m) return -1;
+    return parseInt(m[2],10)*100 + parseInt(m[1],10);
+  }
+  function monthLabel(my){
+    const names=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const m=/^(\d{1,2})-(\d{4})$/.exec(my.trim());
+    return m ? names[+m[1]]+" "+m[2] : my;
+  }
+
+  // ---- file selection ------------------------------------------------------
+  const drop=$("drop"), fileInput=$("file");
+  drop.addEventListener("click",()=>fileInput.click());
+  ["dragenter","dragover"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("hot");}));
+  ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("hot");}));
+  drop.addEventListener("drop",ev=>{ if(ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]); });
+  fileInput.addEventListener("change",ev=>{ if(ev.target.files.length) handleFile(ev.target.files[0]); });
+
+  function fmtBytes(b){ const u=["B","KB","MB","GB"]; let i=0; while(b>=1024&&i<u.length-1){b/=1024;i++;} return b.toFixed(b<10&&i>0?1:0)+" "+u[i]; }
+
+  function handleFile(f){
+    file=f;
+    $("drop").style.display="none";
+    $("indexedCard").style.display="block";
+    $("fname").textContent=f.name;
+    $("fsize").textContent="· "+fmtBytes(f.size);
+    $("findex").textContent="· indexing…";
+    // disable controls during indexing
+    setControls(false);
+    indexFile(f);
+  }
+
+  function setControls(on){
+    ["month","fromMonth","toMonth","minprod","run","modeExact","modeRange"].forEach(id=>$(id).disabled=!on);
+    $("csv").disabled = !(on && lastMatches.length);
+  }
+
+  // ---- pass 1: gather distinct months + counts -----------------------------
+  function indexFile(f){
+    const months=new Set(); const leases=new Set(); let rows=0;
+    showProgress(true,"Indexing file…");
+    Papa.parse(f,{
+      header:true, skipEmptyLines:true, worker:true,
+      step:function(res){
+        const r=res.data;
+        if(!r || r["MONTH-YEAR"]===undefined) return;
+        rows++;
+        if(r["MONTH-YEAR"]) months.add(r["MONTH-YEAR"].trim());
+        if(r["LEASE_KID"]) leases.add(r["LEASE_KID"].trim());
+        if(rows%25000===0){ updateProgress(null,"Indexing… "+rows.toLocaleString()+" rows"); }
+      },
+      complete:function(){
+        showProgress(false);
+        // months sorted newest-first for the single picker
+        const newestFirst=[...months].filter(Boolean).sort((a,b)=>monthKey(b)-monthKey(a));
+        const oldestFirst=[...newestFirst].reverse();
+        function fill(sel,list){ sel.innerHTML=""; list.forEach(m=>{ const o=document.createElement("option"); o.value=m; o.textContent=monthLabel(m)+"   ("+m+")"; sel.appendChild(o); }); }
+        // single (exact) picker: newest first, default newest
+        fill($("month"),newestFirst);
+        if(newestFirst.length) $("month").value=newestFirst[0];
+        // range pickers: From oldest-first (default oldest), To newest-first (default newest = "until now")
+        fill($("fromMonth"),oldestFirst);
+        fill($("toMonth"),newestFirst);
+        if(oldestFirst.length) $("fromMonth").value=oldestFirst[0];
+        if(newestFirst.length) $("toMonth").value=newestFirst[0];
+        // stats
+        $("statStrip").style.display="flex";
+        $("sRows").textContent=rows.toLocaleString();
+        $("sLeases").textContent=leases.size.toLocaleString();
+        $("sMonths").textContent=newestFirst.length.toLocaleString();
+        $("findex").textContent="· "+rows.toLocaleString()+" records ready";
+        setControls(true);
+      },
+      error:function(err){ showProgress(false); $("findex").innerHTML='· <span class="err">could not read file: '+err.message+'</span>'; }
+    });
+  }
+
+  // ---- mode toggle ---------------------------------------------------------
+  function showRangePickers(isRange){
+    $("rangeBox").style.display = isRange ? "flex" : "none";
+    $("month").style.display    = isRange ? "none" : "block";
+    $("dateLab").textContent    = isRange ? "Month range" : "Month";
+    $("dateHint").textContent   = isRange ? "Both ends are included in the results." : "Only records dated in this exact month.";
+  }
+  $("modeRange").addEventListener("click",()=>{ mode="range"; $("modeRange").classList.add("on"); $("modeExact").classList.remove("on"); $("modeHint").textContent="Returns every record from the From month through the To month."; showRangePickers(true); });
+  $("modeExact").addEventListener("click",()=>{ mode="exact"; $("modeExact").classList.add("on"); $("modeRange").classList.remove("on"); $("modeHint").textContent="Returns every record dated in exactly one month."; showRangePickers(false); });
+
+  // ---- pass 2: scan & filter ----------------------------------------------
+  $("run").addEventListener("click",runScan);
+
+  function runScan(){
+    if(!file) return;
+    const minProd=parseFloat($("minprod").value)||0;
+    let targetKey, fromKey, toKey, label;
+
+    if(mode==="exact"){
+      targetKey=monthKey($("month").value);
+      label=monthLabel($("month").value);
+    }else{
+      fromKey=monthKey($("fromMonth").value);
+      toKey=monthKey($("toMonth").value);
+      if(fromKey>toKey){ // swap if user picked them backwards
+        const t=fromKey; fromKey=toKey; toKey=t;
+      }
+    }
+
+    setControls(false);
+    $("run").disabled=true;
+    $("results").classList.remove("show");
+    showProgress(true,"Scanning…");
+
+    let scanned=0;
+    const matchesAcc=[];
+
+    Papa.parse(file,{
+      header:true, skipEmptyLines:true, worker:true,
+      step:function(res){
+        const r=res.data;
+        if(!r || r["MONTH-YEAR"]===undefined) return;
+        scanned++;
+        const k=monthKey(r["MONTH-YEAR"]);
+        const prod=parseFloat(r["PRODUCTION"]);
+        if(isNaN(prod) || prod<minProd) { /* skip */ }
+        else if(mode==="exact"){
+          if(k===targetKey) matchesAcc.push(r);
+        }else{
+          if(k>=fromKey && k<=toKey) matchesAcc.push(r);
+        }
+        if(scanned%20000===0){
+          const pct=file.size?Math.min(99,Math.round((res.meta.cursor/file.size)*100)):null;
+          updateProgress(pct,"Scanned "+scanned.toLocaleString()+" rows…");
+        }
+      },
+      complete:function(){
+        showProgress(false);
+        lastMatches=matchesAcc;
+        renderResults(matchesAcc,{
+          mode, minProd,
+          label: mode==="exact" ? label : null,
+          fromLabel: mode==="range" ? monthLabel($("fromMonth").value) : null,
+          toLabel:   mode==="range" ? monthLabel($("toMonth").value) : null
+        });
+        setControls(true);
+      },
+      error:function(err){ showProgress(false); alert("Scan error: "+err.message); setControls(true); }
+    });
+  }
+
+  // ---- rendering -----------------------------------------------------------
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+  function renderResults(matches,info){
+    lastMatches=matches;
+    lastInfo=info;
+    sortCol=null; sortDir=1;            // new result set starts unsorted
+    $("results").classList.add("show");
+    $("matchCount").textContent=matches.length.toLocaleString();
+
+    const ruleText = info.mode==="exact"
+      ? "records dated <b>"+esc(info.label)+"</b>"
+      : "records from <b>"+esc(info.fromLabel)+"</b> through <b>"+esc(info.toLabel)+"</b>";
+    $("recap").innerHTML="Rule: "+ruleText+" with PRODUCTION ≥ <b>"+info.minProd.toLocaleString()+" bbl</b>.";
+
+    renderTable();
+  }
+
+  function renderTable(){
+    const wrap=$("tablewrap");
+    if(!lastMatches.length){
+      wrap.innerHTML='<div class="empty">No lines met both conditions. Try an earlier month or a lower minimum.</div>';
+      $("moreNote").textContent="";
+      $("csv").disabled=true;
+      return;
+    }
+    // header row: each cell is clickable to sort; active column shows an arrow
+    let head='<tr>';
+    for(const c of DISPLAY_COLS){
+      const active = c===sortCol;
+      const arrow = active ? (sortDir===1 ? ' ▲' : ' ▼') : '';
+      const cls = 'sortable'+(active?' sorted':'')+(NUMERIC.has(c)?' num':'');
+      head+='<th class="'+cls+'" data-col="'+esc(c)+'" title="Click to sort">'+esc(c)+'<span class="arr">'+arrow+'</span></th>';
+    }
+    head+='</tr>';
+
+    const show=lastMatches.slice(0,DISPLAY_CAP);
+    let body='';
+    for(const r of show){
+      body+='<tr>';
+      for(const c of DISPLAY_COLS){
+        let v=(r[c]==null?"":(""+r[c]).trim());
+        if(c==="URL" && v) body+='<td><a href="'+esc(v)+'" target="_blank" rel="noopener">open ↗</a></td>';
+        else if(c==="PRODUCTION") body+='<td class="prod">'+esc(v)+'</td>';
+        else body+='<td>'+esc(v)+'</td>';
+      }
+      body+='</tr>';
+    }
+    wrap.innerHTML='<table><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
+    $("moreNote").textContent = lastMatches.length>DISPLAY_CAP
+      ? "Showing the first "+DISPLAY_CAP.toLocaleString()+" of "+lastMatches.length.toLocaleString()+" matches (sorted) — use Download CSV for the complete set."
+      : "";
+    $("csv").disabled=false;
+  }
+
+  // sort the FULL result set so the top rows shown reflect the true order
+  function sortBy(col){
+    if(!lastMatches.length) return;
+    if(col===sortCol){
+      sortDir=-sortDir;                 // same column → flip direction
+    }else{
+      sortCol=col;
+      // first click: numbers go high→low, text goes A→Z
+      sortDir = NUMERIC.has(col) ? -1 : 1;
+    }
+    const numeric=NUMERIC.has(col), dir=sortDir;
+    lastMatches.sort((a,b)=>{
+      let av=(a[col]==null?"":(""+a[col]).trim());
+      let bv=(b[col]==null?"":(""+b[col]).trim());
+      if(numeric){
+        let an=parseFloat(av), bn=parseFloat(bv);
+        if(isNaN(an)) an=-Infinity;
+        if(isNaN(bn)) bn=-Infinity;
+        return (an-bn)*dir;
+      }
+      return av.localeCompare(bv,undefined,{numeric:true,sensitivity:"base"})*dir;
+    });
+    renderTable();
+  }
+
+  // one delegated click handler for the (rebuilt) header cells
+  $("tablewrap").addEventListener("click",ev=>{
+    const th=ev.target.closest("th[data-col]");
+    if(th) sortBy(th.getAttribute("data-col"));
+  });
+
+  // ---- CSV export ----------------------------------------------------------
+  $("csv").addEventListener("click",()=>{
+    if(!lastMatches.length) return;
+    const csv=Papa.unparse({fields:COLS,data:lastMatches.map(r=>COLS.map(c=>(r[c]==null?"":(""+r[c]).trim())))});
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    const tag = mode==="exact" ? $("month").value : ($("fromMonth").value+"_to_"+$("toMonth").value);
+    a.download="lease_matches_"+(tag||"results")+".csv";
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  // ---- reset ---------------------------------------------------------------
+  $("reset").addEventListener("click",()=>{
+    file=null; lastMatches=[];
+    $("indexedCard").style.display="none";
+    $("statStrip").style.display="none";
+    $("results").classList.remove("show");
+    fileInput.value="";
+    $("drop").style.display="block";
+  });
+
+  // ---- progress UI ---------------------------------------------------------
+  function showProgress(on,text){ const p=$("prog"); p.classList.toggle("show",on); if(on){ $("progText").textContent=text||"Working…"; $("barFill").style.width="0%"; $("progPct").textContent=""; } }
+  function updateProgress(pct,text){ if(text)$("progText").textContent=text; if(pct!=null){ $("barFill").style.width=pct+"%"; $("progPct").textContent=pct+"%"; } }
+})();
+</script>
