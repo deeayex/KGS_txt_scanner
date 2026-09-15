@@ -12,8 +12,6 @@ an IIFE). The user loads a KGS CSV/TXT export locally; all parsing, filtering,
 sorting, and mapping happen in the browser. Nothing is uploaded. The only network
 dependencies are CDN libraries/fonts and the map tile server.
 
-There is also a companion CLI, `kgs_downloader.py` (stdlib-only Python 3), that
-downloads and unzips the official KGS archive files that this app consumes.
 
 ### Input data shape
 21 columns, comma-delimited, quoted fields. The app keys on these:
@@ -183,11 +181,3 @@ A point is plotted only if lat/lng parse and fall in `lat∈(30,42)`, `lng∈(-1
 
 ---
 
-## 9. Companion: `kgs_downloader.py`
-
-Interactive stdlib-only CLI. Presents the KGS archive catalog (oil/gas × decade +
-2020-present + all-leases listing), downloads the selected `.zip`(s) from
-`https://www.kgs.ku.edu/PRS/Ora_Archive/`, and extracts the `.txt`. Confirms before
-downloading pre-1987 (1980–1989) archives, which carry an IHS Energy redistribution
-restriction. Run: `python kgs_downloader.py`. KGS refreshes monthly from the Kansas
-Dept. of Revenue, so a monthly run + reload keeps the app current.
